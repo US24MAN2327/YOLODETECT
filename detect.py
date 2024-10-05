@@ -1,73 +1,38 @@
-import cv2
-import numpy as np
 import streamlit as st
 from PIL import Image
+import numpy as np
+from ultralytics import YOLO
+import cv2
 
 # Load YOLO model
-weights_path = 'yolov3.weights'  # Path to YOLOv3 weights
-config_path = 'yolov3.cfg'  # Path to YOLOv3 config
-labels_path = 'coco.names'  # Path to COCO class labels
-
-# Load YOLO network and COCO labels
 @st.cache_resource
 def load_model():
-    net = cv2.dnn.readNetFromDarknet(config_path, weights_path)
-    with open(labels_path, "r") as f:
-        labels = [line.strip() for line in f.readlines()]
-    layer_names = net.getLayerNames()
-    output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
-    return net, labels, output_layers
+    return YOLO('yolov8n.pt')  # Load a pretrained YOLOv8 model
 
-net, labels, output_layers = load_model()
+model = load_model()
 
 def process_image(image):
-    (H, W) = image.shape[:2]
-
-    # Create a 4D blob from the image and perform a forward pass to get detections
-    blob = cv2.dnn.blobFromImage(image, 1 / 255.0, (416, 416), swapRB=True, crop=False)
-    net.setInput(blob)
-    layer_outputs = net.forward(output_layers)
-
-    boxes = []
-    confidences = []
-    class_ids = []
-
-    # Process each output layer
-    for output in layer_outputs:
-        for detection in output:
-            scores = detection[5:]
-            class_id = np.argmax(scores)
-            confidence = scores[class_id]
-            if confidence > 0.5:  # Filter out weak predictions
-                box = detection[0:4] * np.array([W, H, W, H])
-                (centerX, centerY, width, height) = box.astype("int")
-                # Calculate top-left corner of the bounding box
-                x = int(centerX - (width / 2))
-                y = int(centerY - (height / 2))
-                boxes.append([x, y, int(width), int(height)])
-                confidences.append(float(confidence))
-                class_ids.append(class_id)
-
-    # Apply non-maxima suppression to suppress weak, overlapping bounding boxes
-    indices = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
-
-    # Draw the bounding boxes and labels
-    if len(indices) > 0:
-        for i in indices.flatten():
-            (x, y) = (boxes[i][0], boxes[i][1])
-            (w, h) = (boxes[i][2], boxes[i][3])
-            color = [int(c) for c in np.random.randint(0, 255, size=(3,))]
-            label = f"{labels[class_ids[i]]}: {confidences[i]:.2f}"
-            # Draw bounding box and label
-            cv2.rectangle(image, (x, y), (x + w, y + h), color, 2)
-            cv2.putText(image, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-    return image
+    results = model(image)
+    
+    # Convert PIL Image to numpy array
+    img_array = np.array(image)
+    
+    # Plot the results on the image
+    for result in results:
+        boxes = result.boxes.xyxy.cpu().numpy().astype(int)
+        classes = result.boxes.cls.cpu().numpy().astype(int)
+        
+        for box, cls in zip(boxes, classes):
+            cv2.rectangle(img_array, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
+            cv2.putText(img_array, result.names[cls], (box[0], box[1] - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+    
+    return Image.fromarray(img_array)
 
 def main():
     st.title("YOLO Object Detection App")
 
-    st.write("This app uses YOLOv3 to detect objects in images.")
+    st.write("This app uses YOLOv8 to detect objects in images.")
 
     upload_option = st.radio("Choose input method:", ("Upload Image", "Use Webcam"))
 
@@ -77,8 +42,7 @@ def main():
             image = Image.open(uploaded_file)
             st.image(image, caption="Uploaded Image", use_column_width=True)
             if st.button("Detect Objects"):
-                image_np = np.array(image.convert('RGB'))
-                processed_image = process_image(image_np)
+                processed_image = process_image(image)
                 st.image(processed_image, caption="Processed Image", use_column_width=True)
 
     else:  # Use Webcam
@@ -90,6 +54,7 @@ def main():
         while run:
             _, frame = camera.read()
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = Image.fromarray(frame)
             processed_frame = process_image(frame)
             FRAME_WINDOW.image(processed_frame)
 
