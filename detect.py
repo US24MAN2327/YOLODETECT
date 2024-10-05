@@ -28,7 +28,6 @@ def process_image(image):
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
     
     return Image.fromarray(img_array)
-
 def main():
     st.title("YOLO Object Detection App")
 
@@ -52,7 +51,12 @@ def main():
         camera = cv2.VideoCapture(0)
 
         while run:
-            _, frame = camera.read()
+            ret, frame = camera.read()
+
+            if not ret:
+                st.warning("Failed to capture image from webcam. Please check your camera.")
+                continue
+
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame = Image.fromarray(frame)
             processed_frame = process_image(frame)
@@ -62,3 +66,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
