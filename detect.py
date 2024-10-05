@@ -3,108 +3,62 @@ from PIL import Image
 import numpy as np
 from ultralytics import YOLO
 import cv2
-import base64
-from io import BytesIO
 
-# Load the YOLOv8 model
-model = YOLO('yolov8n.pt')
+# Load YOLO model
+@st.cache_resource
+def load_model():
+    return YOLO('yolov8n.pt')  # Load a pretrained YOLOv8 model
+
+model = load_model()
 
 def process_image(image):
+    results = model(image)
+    
     # Convert PIL Image to numpy array
     img_array = np.array(image)
     
-    # Check if the image has an alpha channel (4 channels)
-    if img_array.shape[-1] == 4:
-        # Convert RGBA to RGB
-        img_array = img_array[:, :, :3]
-    
-    # Ensure the image is in RGB format
-    if len(img_array.shape) == 2:  # Grayscale
-        img_array = cv2.cvtColor(img_array, cv2.COLOR_GRAY2RGB)
-    elif img_array.shape[-1] == 3:  # RGB
-        img_array = cv2.cvtColor(img_array, cv2.COLOR_BGR2RGB)
-    
-    # Perform object detection
-    results = model(img_array)
-    
     # Plot the results on the image
-    res_plotted = results[0].plot()
-    return Image.fromarray(res_plotted)
-
-def webcam_access():
-    # JavaScript to capture webcam image
-    js_code = """
-    <script>
-    const captureImage = () => {
-        const canvas = document.createElement('canvas');
-        const video = document.querySelector('video');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg');
-        const data = {image: dataUrl};
-        window.parent.postMessage({type: 'CAPTURED_IMAGE', data: JSON.stringify(data)}, '*');
-    };
-    
-    navigator.mediaDevices.getUserMedia({video: true})
-        .then((stream) => {
-            const videoElement = document.createElement('video');
-            videoElement.srcObject = stream;
-            videoElement.autoplay = true;
-            document.body.appendChild(videoElement);
-            
-            const captureButton = document.createElement('button');
-            captureButton.textContent = 'Capture';
-            captureButton.onclick = captureImage;
-            document.body.appendChild(captureButton);
-        })
-        .catch((err) => {
-            console.error("Error accessing webcam:", err);
-        });
-    </script>
-    """
-    
-    st.components.v1.html(js_code, height=300)
-    
-    captured_image = st.empty()
-    
-    if 'captured_image' not in st.session_state:
-        st.session_state.captured_image = None
-    
-    # Handle the captured image
-    if captured_image_b64 := st.experimental_get_query_params().get('captured_image'):
-        captured_image_b64 = captured_image_b64[0].split(',')[1]
-        image_data = base64.b64decode(captured_image_b64)
-        st.session_state.captured_image = Image.open(BytesIO(image_data))
-    
-    if st.session_state.captured_image:
-        captured_image.image(st.session_state.captured_image, caption='Captured Image', use_column_width=True)
+    for result in results:
+        boxes = result.boxes.xyxy.cpu().numpy().astype(int)
+        classes = result.boxes.cls.cpu().numpy().astype(int)
         
-        if st.button('Detect Objects'):
-            processed_image = process_image(st.session_state.captured_image)
-            st.image(processed_image, caption='Processed Image', use_column_width=True)
-
-def file_upload_access():
-    uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-        
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        st.image(image, caption='Uploaded Image', use_column_width=True)
-        
-        if st.button('Detect Objects'):
-            processed_image = process_image(image)
-            st.image(processed_image, caption='Processed Image', use_column_width=True)
+        for box, cls in zip(boxes, classes):
+            cv2.rectangle(img_array, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
+            cv2.putText(img_array, result.names[cls], (box[0], box[1] - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+    
+    return Image.fromarray(img_array)
 
 def main():
-    st.title("YOLOv8 Object Detection")
-    
-    # Sidebar for selecting input method
-    input_method = st.sidebar.radio("Select Input Method", ["Webcam", "File Upload"])
-    
-    if input_method == "File Upload":
-        file_upload_access()
-    elif input_method == "Webcam":
-        webcam_access()
+    st.title("YOLO Object Detection App")
+
+    st.write("This app uses YOLOv8 to detect objects in images.")
+
+    upload_option = st.radio("Choose input method:", ("Upload Image", "Use Webcam"))
+
+    if upload_option == "Upload Image":
+        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+        if uploaded_file is not None:
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Uploaded Image", use_column_width=True)
+            if st.button("Detect Objects"):
+                processed_image = process_image(image)
+                st.image(processed_image, caption="Processed Image", use_column_width=True)
+
+    else:  # Use Webcam
+        st.write("Click 'Start' to begin object detection using your webcam.")
+        run = st.checkbox("Start")
+        FRAME_WINDOW = st.image([])
+        camera = cv2.VideoCapture(0)
+
+        while run:
+            _, frame = camera.read()
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = Image.fromarray(frame)
+            processed_frame = process_image(frame)
+            FRAME_WINDOW.image(processed_frame)
+
+        camera.release()
 
 if __name__ == "__main__":
     main()
