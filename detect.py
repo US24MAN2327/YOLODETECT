@@ -36,7 +36,6 @@ def main():
     input_method = st.sidebar.radio("Select Input Method", ["Webcam", "File Upload"])
     
     if input_method == "File Upload":
-        # File uploader allows user to add their own image
         uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
         
         if uploaded_file is not None:
@@ -48,21 +47,29 @@ def main():
                 st.image(processed_image, caption='Processed Image', use_column_width=True)
     
     elif input_method == "Webcam":
-        # Webcam input
         st.write("Webcam Feed")
         run = st.checkbox('Run')
         FRAME_WINDOW = st.image([])
         camera = cv2.VideoCapture(0)
         
+        if not camera.isOpened():
+            st.error("Failed to access the webcam. Please check your camera connection or try using File Upload instead.")
+            return
+
         while run:
-            _, frame = camera.read()
+            ret, frame = camera.read()
+            if not ret:
+                st.error("Failed to capture frame from webcam. Please try again or use File Upload.")
+                break
+            
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frame = Image.fromarray(frame)
             processed_frame = process_image(frame)
             FRAME_WINDOW.image(processed_frame)
-        else:
+        
+        camera.release()
+        if not run:
             st.write('Stopped')
-            camera.release()
 
 if __name__ == "__main__":
     main()
