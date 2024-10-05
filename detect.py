@@ -2,8 +2,7 @@ import streamlit as st
 from PIL import Image
 import numpy as np
 from ultralytics import YOLO
-import av
-from streamlit_webrtc import VideoTransformerBase, webrtc_streamer
+import cv2
 
 # Load YOLO model
 @st.cache_resource
@@ -12,27 +11,23 @@ def load_model():
 
 model = load_model()
 
-class YOLOVideoTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.model = model
-
-    def transform(self, frame):
-        # Convert the frame to a numpy array (BGR)
-        img = frame.to_ndarray(format="bgr24")
-
-        # Perform object detection
-        results = self.model(img)
-
-        # Plot the results on the image
-        boxes = results[0].boxes.xyxy.cpu().numpy().astype(int)
-        classes = results[0].boxes.cls.cpu().numpy().astype(int)
-
+def process_image(image):
+    results = model(image)
+    
+    # Convert PIL Image to numpy array
+    img_array = np.array(image)
+    
+    # Plot the results on the image
+    for result in results:
+        boxes = result.boxes.xyxy.cpu().numpy().astype(int)
+        classes = result.boxes.cls.cpu().numpy().astype(int)
+        
         for box, cls in zip(boxes, classes):
-            cv2.rectangle(img, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
-            cv2.putText(img, results[0].names[cls], (box[0], box[1] - 10),
+            cv2.rectangle(img_array, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
+            cv2.putText(img_array, result.names[cls], (box[0], box[1] - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-
-        return img
+    
+    return Image.fromarray(img_array)
 
 def main():
     st.title("YOLO Object Detection App")
@@ -52,7 +47,18 @@ def main():
 
     else:  # Use Webcam
         st.write("Click 'Start' to begin object detection using your webcam.")
-        webrtc_streamer(key="example", video_transformer_factory=YOLOVideoTransformer)
+        run = st.checkbox("Start")
+        FRAME_WINDOW = st.image([])
+        camera = cv2.VideoCapture(0)
+
+        while run:
+            _, frame = camera.read()
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = Image.fromarray(frame)
+            processed_frame = process_image(frame)
+            FRAME_WINDOW.image(processed_frame)
+
+        camera.release()
 
 if __name__ == "__main__":
     main()
