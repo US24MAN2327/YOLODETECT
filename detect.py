@@ -48,7 +48,14 @@ def main():
         st.write("Click 'Start' to begin object detection using your webcam.")
         run = st.checkbox("Start")
         FRAME_WINDOW = st.image([])
-        camera = cv2.VideoCapture(1)
+
+        # Attempt to access the webcam
+        camera = cv2.VideoCapture(0)
+
+        # Check if the camera is opened successfully
+        if not camera.isOpened():
+            st.error("Unable to access the camera. Please make sure it's connected and not being used by another application.")
+            return
 
         while run:
             ret, frame = camera.read()
@@ -66,4 +73,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
