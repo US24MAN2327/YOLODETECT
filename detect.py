@@ -29,12 +29,30 @@ def process_image(image):
     
     return Image.fromarray(img_array)
 
+def process_video(video_path):
+    cap = cv2.VideoCapture(video_path)
+    stframe = st.empty()  # Placeholder for video frame
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_pil = Image.fromarray(frame)
+        processed_frame = process_image(frame_pil)
+        
+        # Display the processed frame in the Streamlit app
+        stframe.image(processed_frame, use_column_width=True)
+
+    cap.release()
+
 def main():
     st.title("YOLO Object Detection App")
 
-    st.write("This app uses YOLOv8 to detect objects in images.")
+    st.write("This app uses YOLOv8 to detect objects in images or videos.")
 
-    upload_option = st.radio("Choose input method:", ("Upload Image", "Use Webcam"))
+    upload_option = st.radio("Choose input method:", ("Upload Image", "Use Webcam", "Upload Video"))
 
     if upload_option == "Upload Image":
         uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
@@ -44,6 +62,13 @@ def main():
             if st.button("Detect Objects"):
                 processed_image = process_image(image)
                 st.image(processed_image, caption="Processed Image", use_column_width=True)
+
+    elif upload_option == "Upload Video":
+        uploaded_video = st.file_uploader("Choose a video...", type=["mp4", "avi", "mov"])
+        if uploaded_video is not None:
+            st.video(uploaded_video)
+            if st.button("Detect Objects in Video"):
+                process_video(uploaded_video.name)
 
     else:  # Use Webcam
         st.write("Click 'Start' to begin object detection using your webcam.")
