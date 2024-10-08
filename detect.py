@@ -58,14 +58,27 @@ def main():
     else:  # Use Webcam
         st.write("Click 'Start' to begin object detection using your webcam.")
         run = st.checkbox("Start")
-        FRAME_WINDOW = st.image([])
-        camera = cv2.VideoCapture(0)
-        while run:
-            _, frame = camera.read()
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            processed_frame = process_frame(Image.fromarray(frame))
-            FRAME_WINDOW.image(processed_frame)
-        camera.release()
+        
+        if run:
+            try:
+                FRAME_WINDOW = st.image([])
+                camera = cv2.VideoCapture(0)
+                if not camera.isOpened():
+                    raise IOError("Cannot open webcam")
+                
+                while run:
+                    ret, frame = camera.read()
+                    if not ret:
+                        st.error("Failed to capture frame from webcam")
+                        break
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    processed_frame = process_frame(Image.fromarray(frame))
+                    FRAME_WINDOW.image(processed_frame)
+                
+                camera.release()
+            except Exception as e:
+                st.error(f"Error accessing webcam: {str(e)}")
+                st.error("The webcam cannot be accessed. This may be due to the server not being connected to a camera.")
 
 if __name__ == "__main__":
     main()
